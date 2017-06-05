@@ -1,0 +1,9 @@
+server {
+    listen 80;
+    server_name codescalers.com;
+
+    location / {
+        proxy_pass http://codescalers.com:8031;
+    }
+}
+

@@ -1,0 +1,9 @@
+server {
+    listen 80;
+    server_name jumpscale.com www.jumpscale.com;
+
+    location / {
+        proxy_pass http://jumpscale.com:82;
+    }
+}
+

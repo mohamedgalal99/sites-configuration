@@ -1,0 +1,8 @@
+server {
+    listen 80;
+    server_name incubaid.com www.incubaid.com;
+
+    location / {
+        proxy_pass http://incubaid.com:83;
+    }
+}

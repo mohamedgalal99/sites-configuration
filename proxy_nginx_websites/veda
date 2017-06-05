@@ -1,0 +1,8 @@
+server {
+    listen 80;
+    server_name veda-masters.com www.veda-masters.com;
+
+    location / {
+        proxy_pass http://veda-masters.com;
+    }
+}
