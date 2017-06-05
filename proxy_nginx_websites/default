@@ -84,25 +84,3 @@ server {
 #		try_files $uri $uri/ =404;
 #	}
 #}
-
-server {
-        listen 80;
-        server_name www.gig.tech gig.tech greenitglobe.com www.greenitglobe.com;
-
-        location / {
-		rewrite ^ https://gig.tech$request_uri? permanent;
-        }
-}
-
-server {
-    listen 443;
-    server_name gig.tech www.gig.tech greenitglobe.com www.greenitglobe.com;    
-    ssl on;
-
-    location / {
-        proxy_pass http://gig.tech:8080;
-    }
-      ssl_certificate /etc/nginx/ssl/gig.tech.crt;
-    ssl_certificate_key /etc/nginx/ssl/gig.tech.key;
-}
-
