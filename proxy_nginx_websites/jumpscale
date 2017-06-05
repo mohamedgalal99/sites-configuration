@@ -1,3 +1,4 @@
+#repo git@github.com:Jumpscale/www-jumpscale.git
 server {
     listen 80;
     server_name jumpscale.com www.jumpscale.com;

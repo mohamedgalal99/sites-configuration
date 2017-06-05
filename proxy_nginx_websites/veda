@@ -1,3 +1,4 @@
+#repo ssh://git@docs.greenitglobe.com:10022/veda/www_veda-masters.com.git
 server {
     listen 80;
     server_name veda-masters.com www.veda-masters.com;
