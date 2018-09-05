@@ -1,0 +1,156 @@
+# Nginx Single-file setup for demo2.demo.greenitglobe.com
+upstream gridmgr {
+        server 172.17.0.4;
+}
+
+
+upstream be-gen-1 {
+        ip_hash; # force trafic to be 1 on 1 for auth to work
+   server 10.1.2.15:2001;
+   server 10.1.2.14:2001;
+   server 10.1.2.12:2001;
+   server 10.1.2.13:2001;
+   server 10.1.2.11:2001;
+   
+}
+
+upstream ovs-be-gen-1 {
+        ip_hash; # force trafic to be 1 on 1 for auth to work
+   server 10.1.2.23:2001;
+   server 10.1.2.22:2001;
+   
+}
+
+
+upstream cloudbroker {
+        server 172.17.0.4;
+}
+
+upstream oauthserver {
+        server 172.17.0.4:8010;
+}
+
+# Redirect 80 immediately to https
+server {
+        listen 80;
+        server_name be-gen-1.demo.greenitglobe.com www.be-gen-1.demo.greenitglobe.com;
+        rewrite        ^ https://be-gen-1.demo.greenitglobe.com$request_uri? permanent;
+}
+
+server {
+        listen  443 default_server;
+        keepalive_timeout    60;
+        gzip_static on;
+        gzip_proxied any;
+        proxy_set_header Accept-Encoding $http_accept_encoding;
+        ssl on;
+        ssl_certificate /opt/nginx/cfg/ssl/demo.greenitglobe.com.crt;
+        ssl_certificate_key /opt/nginx/cfg/ssl/demo.greenitglobe.com.key;
+        ssl_protocols TLSv1;
+        proxy_connect_timeout       300;
+        proxy_send_timeout          300;
+        proxy_read_timeout          300;
+        send_timeout                300;
+        #Disables all weak ciphers
+        #ssl_ciphers ALL:!aNULL:!ADH:!eNULL:!LOW:!EXP:RC4+RSA:+HIGH:+MEDIUM;
+
+        proxy_set_header Host            $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        #oauth locations
+        location /login {
+                proxy_pass      http://oauthserver/login;
+        }
+
+        location /user {
+                proxy_pass      http://oauthserver/user;
+        }
+
+        location /logout {
+                proxy_pass      http://oauthserver/logout;
+        }
+
+        location = / {
+                return 301 $scheme://$host/g8vdc/;
+        }
+
+        location / {
+                proxy_pass      http://cloudbroker/;
+        }
+}
+
+
+server {
+        listen  443;
+        server_name ovs-be-gen-1.demo.greenitglobe.com;
+        keepalive_timeout    60;
+        gzip_static on;
+        gzip_proxied any;
+        proxy_set_header Accept-Encoding $http_accept_encoding;
+        ssl on;
+        ssl_certificate /opt/nginx/cfg/ssl/demo.greenitglobe.com.crt;
+        ssl_certificate_key /opt/nginx/cfg/ssl/demo.greenitglobe.com.key;
+        ssl_protocols TLSv1;
+        #Disables all weak ciphers
+        ssl_ciphers ALL:!aNULL:!ADH:!eNULL:!LOW:!EXP:RC4+RSA:+HIGH:+MEDIUM;
+        location ~ /ovcinit/([\w-]+)? {
+            add_header Set-Cookie "ovs_proxy_location=$1;Path=/";
+            return 302 $scheme://$host/;
+        }
+
+        location / {
+            proxy_pass http://ovs-$cookie_ovs_proxy_location;
+            proxy_set_header Host "ovs";
+            proxy_set_header X-Forwarded-Host $host;
+        }
+}
+
+server {
+        listen  443;
+        server_name ~^novnc-(?<ovclocation>.+).demo.greenitglobe.com$;
+        keepalive_timeout    60;
+        gzip_static on;
+        gzip_proxied any;
+        proxy_set_header Accept-Encoding $http_accept_encoding;
+        ssl on;
+        ssl_certificate /opt/nginx/cfg/ssl/demo.greenitglobe.com.crt;
+        ssl_certificate_key /opt/nginx/cfg/ssl/demo.greenitglobe.com.key;
+        ssl_protocols TLSv1;
+        #Disables all weak ciphers
+        ssl_ciphers ALL:!aNULL:!ADH:!eNULL:!LOW:!EXP:RC4+RSA:+HIGH:+MEDIUM;
+        location / {
+                proxy_pass http://$ovclocation;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host "novnc";
+                proxy_read_timeout 86400;
+        }
+}
+
+server {
+        listen  443;
+        server_name defense-be-gen-1.demo.greenitglobe.com;
+        keepalive_timeout    60;
+        gzip_static on;
+        gzip_proxied any;
+        proxy_set_header Accept-Encoding $http_accept_encoding;
+        ssl on;
+        ssl_certificate /opt/nginx/cfg/ssl/demo.greenitglobe.com.crt;
+        ssl_certificate_key /opt/nginx/cfg/ssl/demo.greenitglobe.com.key;
+        ssl_protocols TLSv1;
+        #Disables all weak ciphers
+        ssl_ciphers ALL:!aNULL:!ADH:!eNULL:!LOW:!EXP:RC4+RSA:+HIGH:+MEDIUM;
+
+        # Setting up cookie on first request
+        location ~ /ovcinit/(\d+).(\d+).(\d+).(\d+)/([\w-]+)? {
+                add_header Set-Cookie "ovc_proxy_target=$1.$2.$3.$4;Path=/";
+                add_header Set-Cookie "ovc_proxy_location=$5;Path=/";
+                return 302 $scheme://$host/webfig;
+        }
+
+        location / {
+                proxy_pass http://$cookie_ovc_proxy_location;
+                proxy_set_header Host            $host;
+        }
+}
