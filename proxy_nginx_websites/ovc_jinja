@@ -1,0 +1,145 @@
+upstream gridmgr {
+        server {{master.ipadress}};
+}
+
+{% for location, hosts in locations.items() %}
+upstream {{location}} {
+        ip_hash; # force trafic to be 1 on 1 for auth to work
+   {% for locationhost in hosts -%}
+        server {{locationhost}};
+   {% endfor %}
+}
+{% endfor %}
+
+upstream cloudbroker {
+        server {{master.ipadress}};
+}
+
+upstream oauthserver {
+        server {{master.ipadress}}:8010;
+}
+
+# Redirect 80 immediately to https
+server {
+        listen 80;
+        server_name {{host}} www.{{host}};
+        rewrite        ^ https://{{host}}$request_uri? permanent;
+}
+
+server {
+        listen  443 default_server;
+        keepalive_timeout    60;
+        gzip_static on;
+        gzip_proxied any;
+        proxy_set_header Accept-Encoding $http_accept_encoding;
+        ssl on;
+        ssl_certificate /opt/nginx/cfg/ssl/{{ssl.root}}.crt;
+        ssl_certificate_key /opt/nginx/cfg/ssl/{{ssl.root}}.key;
+        ssl_protocols TLSv1;
+        proxy_connect_timeout       300;
+        proxy_send_timeout          300;
+        proxy_read_timeout          300;
+        send_timeout                300;
+        #Disables all weak ciphers
+        #ssl_ciphers ALL:!aNULL:!ADH:!eNULL:!LOW:!EXP:RC4+RSA:+HIGH:+MEDIUM;
+
+        proxy_set_header Host            $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        #oauth locations
+        location /login {
+                proxy_pass      http://oauthserver/login;
+        }
+
+        location /user {
+                proxy_pass      http://oauthserver/user;
+        }
+
+        location /logout {
+                proxy_pass      http://oauthserver/logout;
+        }
+
+        location = / {
+                return 301 $scheme://$host/g8vdc/;
+        }
+
+        location / {
+                proxy_pass      http://cloudbroker/;
+        }
+}
+
+
+server {
+        listen  443;
+        server_name ovs-{{host}};
+        keepalive_timeout    60;
+        gzip_static on;
+        gzip_proxied any;
+        proxy_set_header Accept-Encoding $http_accept_encoding;
+        ssl on;
+        ssl_certificate /opt/nginx/cfg/ssl/{{ssl.ovs}}.crt;
+        ssl_certificate_key /opt/nginx/cfg/ssl/{{ssl.ovs}}.key;
+        ssl_protocols TLSv1;
+        #Disables all weak ciphers
+        ssl_ciphers ALL:!aNULL:!ADH:!eNULL:!LOW:!EXP:RC4+RSA:+HIGH:+MEDIUM;
+        location ~ /ovcinit/([\w-]+)? {
+            add_header Set-Cookie "ovs_proxy_location=$1;Path=/";
+            return 302 $scheme://$host/;
+        }
+
+        location / {
+            proxy_pass http://ovs-$cookie_ovs_proxy_location;
+            proxy_set_header Host "ovs";
+            proxy_set_header X-Forwarded-Host $host;
+        }
+}
+
+server {
+        listen  443;
+        server_name ~^novnc-(?<ovclocation>.+).{{domain}}$;
+        keepalive_timeout    60;
+        gzip_static on;
+        gzip_proxied any;
+        proxy_set_header Accept-Encoding $http_accept_encoding;
+        ssl on;
+        ssl_certificate /opt/nginx/cfg/ssl/{{ssl.novnc}}.crt;
+        ssl_certificate_key /opt/nginx/cfg/ssl/{{ssl.novnc}}.key;
+        ssl_protocols TLSv1;
+        #Disables all weak ciphers
+        ssl_ciphers ALL:!aNULL:!ADH:!eNULL:!LOW:!EXP:RC4+RSA:+HIGH:+MEDIUM;
+        location / {
+                proxy_pass http://$ovclocation;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host "novnc";
+                proxy_read_timeout 86400;
+        }
+}
+
+server {
+        listen  443;
+        server_name defense-{{host}};
+        keepalive_timeout    60;
+        gzip_static on;
+        gzip_proxied any;
+        proxy_set_header Accept-Encoding $http_accept_encoding;
+        ssl on;
+        ssl_certificate /opt/nginx/cfg/ssl/{{ssl.defense}}.crt;
+        ssl_certificate_key /opt/nginx/cfg/ssl/{{ssl.defense}}.key;
+        ssl_protocols TLSv1;
+        #Disables all weak ciphers
+        ssl_ciphers ALL:!aNULL:!ADH:!eNULL:!LOW:!EXP:RC4+RSA:+HIGH:+MEDIUM;
+
+        # Setting up cookie on first request
+        location ~ /ovcinit/(\d+).(\d+).(\d+).(\d+)/([\w-]+)? {
+                add_header Set-Cookie "ovc_proxy_target=$1.$2.$3.$4;Path=/";
+                add_header Set-Cookie "ovc_proxy_location=$5;Path=/";
+                return 302 $scheme://$host/webfig;
+        }
+
+        location / {
+                proxy_pass http://$cookie_ovc_proxy_location;
+                proxy_set_header Host            $host;
+        }
+}
